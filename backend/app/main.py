@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import chat, health
+from app.api.routes import chat, health, voice
 from app.core.config import get_settings
 from app.core.errors import ConfigurationError, ProviderError
 
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(chat.router)
+    app.include_router(voice.router)
     return app
 
 

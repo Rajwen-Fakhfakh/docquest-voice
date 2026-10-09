@@ -192,3 +192,21 @@ main.chat-main {
   justify-content: center;
   flex-shrink: 0;
 }
+
+/* Micro : gris quand coupé (défaut), rouge quand l'écoute est active. */
+.mic-button,
+.sound-button {
+  background: #e5e5ea;
+  color: #1d1d1f;
+}
+
+.mic-button.active {
+  background: #ff3b30;
+  color: #ffffff;
+}
+
+.sound-button.off {
+  background: #ffffff;
+  color: #6e6e73;
+  border: 1px solid #e5e5ea;
+}

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = None
     gemini_chat_model: str = "gemini-3.8-flash"
+    gemini_live_model: str = "gemini-2.5-flash-native-audio-preview-09-2025"
     # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur du .env
     # avant notre validateur, ce qui échoue pour `CORS_ORIGINS=http://localhost:5173`.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]

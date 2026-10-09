@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, FormEvent } from "react";
 import type { ChatTurn } from "@/lib/chat";
 import { streamLlm } from "@/lib/llm";
+import { applyVoiceMessage, type TranscriptEntry } from "@/lib/transcript";
+import { VoiceSession } from "@/lib/voice";
 
-type Message = ChatTurn & {
-  id: string;
+type VoiceStatus = "idle" | "connecting" | "live";
+
+type Message = TranscriptEntry & {
   // Message d'erreur affiché à l'écran : jamais renvoyé au modèle.
   isError?: boolean;
 };
@@ -14,7 +17,67 @@ export default function ChatShell() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [soundOn, setSoundOn] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const voiceRef = useRef<VoiceSession | null>(null);
+
+  const addError = useCallback((content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: "assistant", content, isError: true },
+    ]);
+  }, []);
+
+  const stopVoice = useCallback(() => {
+    voiceRef.current?.stop();
+    voiceRef.current = null;
+  }, []);
+
+  const startVoice = useCallback(async () => {
+    setVoiceStatus("connecting");
+    setSoundOn(true);
+    try {
+      const session = await VoiceSession.start({
+        onMessage: (message) =>
+          setMessages((prev) =>
+            applyVoiceMessage<Message>(prev, message, (role, content) => ({
+              id: crypto.randomUUID(),
+              role,
+              content,
+            }))
+          ),
+        onClose: (error) => {
+          voiceRef.current = null;
+          setVoiceStatus("idle");
+          if (error) addError(error);
+        },
+      });
+      voiceRef.current = session;
+      setVoiceStatus("live");
+    } catch (err) {
+      setVoiceStatus("idle");
+      addError(
+        err instanceof Error && err.name === "NotAllowedError"
+          ? "L'accès au micro a été refusé."
+          : "Impossible de démarrer le mode vocal."
+      );
+    }
+  }, [addError]);
+
+  // Le micro est coupé par défaut : l'activer ouvre la session vocale, le recouper la ferme.
+  function toggleMic() {
+    if (voiceStatus === "idle") void startVoice();
+    else stopVoice();
+  }
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    voiceRef.current?.setSoundOn(next);
+  }
+
+  useEffect(() => stopVoice, [stopVoice]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -105,6 +168,29 @@ export default function ChatShell() {
           placeholder="Écrivez un message..."
           aria-label="Message"
         />
+        {voiceStatus === "live" && (
+          <button
+            type="button"
+            className={`send-button sound-button ${soundOn ? "" : "off"}`}
+            onClick={toggleSound}
+            aria-pressed={!soundOn}
+            aria-label={soundOn ? "Couper le son" : "Réactiver le son"}
+            title={soundOn ? "Couper le son" : "Réactiver le son"}
+          >
+            <SpeakerIcon muted={!soundOn} />
+          </button>
+        )}
+        <button
+          type="button"
+          className={`send-button mic-button ${voiceStatus !== "idle" ? "active" : ""}`}
+          onClick={toggleMic}
+          disabled={voiceStatus === "connecting"}
+          aria-pressed={voiceStatus === "live"}
+          aria-label={voiceStatus === "idle" ? "Activer le micro" : "Couper l'écoute"}
+          title={voiceStatus === "idle" ? "Activer le micro" : "Couper l'écoute"}
+        >
+          <MicIcon />
+        </button>
         <button
           type="submit"
           className="send-button"
@@ -132,6 +218,43 @@ function SendIcon() {
     >
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
+    </svg>
+  );
+}
+
+const iconProps = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function MicIcon() {
+  return (
+    <svg {...iconProps}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg {...iconProps}>
+      <polygon points="3 9 7 9 12 5 12 19 7 15 3 15" />
+      {muted ? (
+        <>
+          <line x1="16" y1="9" x2="22" y2="15" />
+          <line x1="22" y1="9" x2="16" y2="15" />
+        </>
+      ) : (
+        <path d="M16 8.5a5 5 0 0 1 0 7" />
+      )}
     </svg>
   );
 }

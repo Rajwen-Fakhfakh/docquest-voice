@@ -1,7 +1,11 @@
 from collections.abc import AsyncIterator
-from typing import Protocol
+from contextlib import AbstractAsyncContextManager
+from typing import TYPE_CHECKING, Protocol
 
 from app.core.models import Message
+
+if TYPE_CHECKING:
+    from app.core.voice import VoiceSession
 
 
 class ChatProvider(Protocol):
@@ -11,4 +15,12 @@ class ChatProvider(Protocol):
 
     def stream(self, system_prompt: str, messages: list[Message]) -> AsyncIterator[str]:
         """Produit la réponse par morceaux de texte non vides."""
+        ...
+
+
+class VoiceProvider(Protocol):
+    """Contrat d'un fournisseur de conversation vocale temps réel."""
+
+    def connect(self, system_prompt: str) -> AbstractAsyncContextManager["VoiceSession"]:
+        """Ouvre une session. Lève `ProviderError` si la connexion échoue."""
         ...
