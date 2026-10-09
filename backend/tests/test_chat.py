@@ -21,6 +21,13 @@ class FakeProvider:
             raise self.error
         return self.answer
 
+    async def stream(self, system_prompt: str, messages: list[Message]):
+        self.calls.append((system_prompt, messages))
+        if self.error:
+            raise self.error
+        for part in self.answer.split(" "):
+            yield part + " "
+
 
 def make_client(provider: FakeProvider) -> TestClient:
     app = create_app()
@@ -50,6 +57,20 @@ def test_chat_returns_answer_and_forwards_history():
         Message("assistant", "Bonjour"),
         Message("user", "Qui es-tu ?"),
     ]
+
+
+def test_chat_stream_yields_text_chunks():
+    client = make_client(FakeProvider("Bonjour le monde"))
+    response = client.post("/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "Bonjour le monde "
+
+
+def test_chat_stream_provider_failure_is_502():
+    client = make_client(FakeProvider(error=ProviderError("boom")))
+    response = client.post("/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert response.status_code == 502
 
 
 @pytest.mark.parametrize(

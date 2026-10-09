@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 from app.core.models import Message
 from app.providers.base import ChatProvider
 
@@ -15,3 +17,6 @@ class ChatService:
 
     async def reply(self, messages: list[Message]) -> str:
         return await self._provider.generate(SYSTEM_PROMPT, messages)
+
+    def stream_reply(self, messages: list[Message]) -> AsyncIterator[str]:
+        return self._provider.stream(SYSTEM_PROMPT, messages)

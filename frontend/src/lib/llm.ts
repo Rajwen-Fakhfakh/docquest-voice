@@ -1,21 +1,32 @@
-"use server";
+import { MAX_HISTORY, type ChatTurn } from "./chat";
 
-import { MAX_HISTORY, type ChatResponse, type ChatTurn } from "./chat";
-
-const API_URL = process.env.API_URL ?? "http://localhost:8000";
-
-export async function callLlm(messages: ChatTurn[]): Promise<string> {
-  const res = await fetch(new URL("/chat", API_URL), {
+// Appelle le proxy Next /api/chat et transmet chaque morceau de texte à `onChunk`
+// dès qu'il arrive. Renvoie la réponse complète.
+export async function streamLlm(
+  messages: ChatTurn[],
+  onChunk: (text: string) => void
+): Promise<string> {
+  const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages: messages.slice(-MAX_HISTORY) }),
-    cache: "no-store",
   });
 
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     throw new Error(`LLM request failed with status ${res.status}`);
   }
 
-  const data = (await res.json()) as ChatResponse;
-  return data.answer;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let answer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value, { stream: true });
+    if (text) {
+      answer += text;
+      onChunk(text);
+    }
+  }
+  return answer;
 }

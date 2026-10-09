@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, FormEvent } from "react";
 import type { ChatTurn } from "@/lib/chat";
-import { callLlm } from "@/lib/llm";
+import { streamLlm } from "@/lib/llm";
 
 type Message = ChatTurn & {
   id: string;
@@ -38,15 +38,23 @@ export default function ChatShell() {
     setInput("");
     setLoading(true);
 
+    const assistantId = crypto.randomUUID();
     try {
-      const response = await callLlm(history);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: response },
-      ]);
+      await streamLlm(history, (chunk) => {
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === assistantId);
+          if (!exists) {
+            return [...prev, { id: assistantId, role: "assistant", content: chunk }];
+          }
+          return prev.map((m) =>
+            m.id === assistantId ? { ...m, content: m.content + chunk } : m
+          );
+        });
+      });
     } catch {
+      // Une réponse partielle est remplacée par le message d'erreur.
       setMessages((prev) => [
-        ...prev,
+        ...prev.filter((m) => m.id !== assistantId),
         {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -76,7 +84,8 @@ export default function ChatShell() {
             <div className={`chat-bubble ${m.role}`}>{m.content}</div>
           </div>
         ))}
-        {loading && (
+        {/* L'indicateur de saisie disparaît dès que la réponse commence à arriver. */}
+        {loading && messages[messages.length - 1]?.role === "user" && (
           <div className="chat-bubble-row assistant">
             <div className="chat-bubble assistant typing">
               <span className="dot" />

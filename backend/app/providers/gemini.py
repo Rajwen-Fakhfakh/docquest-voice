@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -42,3 +44,14 @@ class GeminiChatProvider:
         if not text:
             raise ProviderError("Gemini a renvoyé une réponse vide")
         return text
+
+    async def stream(self, system_prompt: str, messages: list[Message]) -> AsyncIterator[str]:
+        try:
+            async for chunk in self._llm.astream(
+                _to_langchain(system_prompt, messages), config=runnable_config()
+            ):
+                text = _extract_text(chunk.content)
+                if text:
+                    yield text
+        except Exception as exc:
+            raise ProviderError("Échec de l'appel à Gemini") from exc
