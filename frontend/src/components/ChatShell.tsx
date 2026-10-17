@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, FormEvent } from "react";
 import type { ChatTurn } from "@/lib/chat";
-import { streamLlm } from "@/lib/llm";
+import { RateLimitedError, streamLlm } from "@/lib/llm";
 import { applyVoiceMessage, type TranscriptEntry } from "@/lib/transcript";
 import { VoiceSession } from "@/lib/voice";
 
@@ -114,14 +114,17 @@ export default function ChatShell() {
           );
         });
       });
-    } catch {
+    } catch (err) {
       // Une réponse partielle est remplacée par le message d'erreur.
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== assistantId),
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: "Une erreur est survenue. Veuillez réessayer.",
+          content:
+            err instanceof RateLimitedError
+              ? "Trop de requêtes pour le moment. Réessayez dans une minute."
+              : "Une erreur est survenue. Veuillez réessayer.",
           isError: true,
         },
       ]);

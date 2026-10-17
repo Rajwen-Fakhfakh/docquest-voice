@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     qdrant_collection: str = "deu2025"
     # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur du .env
     # avant notre validateur, ce qui échoue pour `CORS_ORIGINS=http://localhost:5173`.
+    # Protection de la démo publique (0 = désactivé) : requêtes/minute/IP et plafond global/jour.
+    rate_limit_per_minute: int = 20
+    daily_request_cap: int = 500
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     @field_validator("gemini_api_key", "qdrant_url", "qdrant_api_key", mode="before")

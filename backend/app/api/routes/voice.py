@@ -13,8 +13,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from app.api.deps import get_voice_service
-from app.core.errors import ProviderError
+from app.api.deps import get_guard, get_voice_service
+from app.core.errors import ProviderError, RateLimitError
+from app.core.ratelimit import RequestGuard, client_ip
 from app.core.voice import (
     AudioEvent,
     InterruptedEvent,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["voice"])
 
 WS_INTERNAL_ERROR = 1011
+WS_POLICY_VIOLATION = 1008
 
 
 async def _pump_microphone(websocket: WebSocket, session: VoiceSession) -> None:
@@ -48,9 +50,9 @@ async def _pump_events(websocket: WebSocket, session: VoiceSession) -> None:
                 await websocket.send_json({"type": "interrupted"})
 
 
-async def _fail(websocket: WebSocket, message: str) -> None:
+async def _fail(websocket: WebSocket, message: str, code: int = WS_INTERNAL_ERROR) -> None:
     await websocket.send_json({"type": "error", "message": message})
-    await websocket.close(code=WS_INTERNAL_ERROR)
+    await websocket.close(code=code)
 
 
 @router.websocket("/ws/voice")
@@ -58,8 +60,14 @@ async def voice(
     websocket: WebSocket,
     # `None` si GEMINI_API_KEY est absente : un handler HTTP ne couvre pas les WebSocket.
     service: Annotated[VoiceService | None, Depends(get_voice_service)],
+    guard: Annotated[RequestGuard, Depends(get_guard)],
 ) -> None:
     await websocket.accept()
+    try:
+        guard.check(client_ip(websocket))
+    except RateLimitError as exc:  # pas de handler HTTP pour un WebSocket : on prévient le client
+        await _fail(websocket, str(exc), WS_POLICY_VIOLATION)
+        return
     if service is None:
         await _fail(websocket, "GEMINI_API_KEY n'est pas configurée")
         return

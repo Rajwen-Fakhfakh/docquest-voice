@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { streamLlm } from "./llm";
+import { RateLimitedError, streamLlm } from "./llm";
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -70,5 +70,13 @@ describe("streamLlm", () => {
     await expect(
       streamLlm([{ role: "user", content: "hi" }], () => {})
     ).rejects.toThrow("502");
+  });
+
+  it("lève RateLimitedError quand le backend répond 429", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 429, body: null });
+
+    await expect(
+      streamLlm([{ role: "user", content: "hi" }], () => {})
+    ).rejects.toBeInstanceOf(RateLimitedError);
   });
 });

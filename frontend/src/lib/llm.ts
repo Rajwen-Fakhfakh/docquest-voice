@@ -1,5 +1,13 @@
 import { MAX_HISTORY, type ChatTurn } from "./chat";
 
+// Le backend refuse la requête (429) quand le visiteur ou la démo entière a trop consommé.
+export class RateLimitedError extends Error {
+  constructor() {
+    super("Rate limited");
+    this.name = "RateLimitedError";
+  }
+}
+
 // Appelle le proxy Next /api/chat et transmet chaque morceau de texte à `onChunk`
 // dès qu'il arrive. Renvoie la réponse complète.
 export async function streamLlm(
@@ -12,6 +20,7 @@ export async function streamLlm(
     body: JSON.stringify({ messages: messages.slice(-MAX_HISTORY) }),
   });
 
+  if (res.status === 429) throw new RateLimitedError();
   if (!res.ok || !res.body) {
     throw new Error(`LLM request failed with status ${res.status}`);
   }

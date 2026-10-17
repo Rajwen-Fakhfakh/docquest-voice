@@ -4,13 +4,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_chat_service
+from app.api.deps import enforce_rate_limit, get_chat_service
 from app.api.schemas import ChatRequest, ChatResponse
 from app.core.chat import ChatService
 from app.core.errors import ProviderError
 from app.core.models import Message
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"], dependencies=[Depends(enforce_rate_limit)])
 
 
 def _to_messages(request: ChatRequest) -> list[Message]:
