@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-001"
     rag_pdf_path: Path = DATA_DIR / "deu2025.pdf"
     rag_chunks_path: Path = DATA_DIR / "chunks.jsonl"
-    rag_index_path: Path = DATA_DIR / "index.json"
+    rag_index_path: Path = DATA_DIR / "index.json.gz"
     rag_top_k: int = 5
     # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur du .env
     # avant notre validateur, ce qui échoue pour `CORS_ORIGINS=http://localhost:5173`.

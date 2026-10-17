@@ -6,7 +6,7 @@ from langchain_core.vectorstores import InMemoryVectorStore
 
 from app.core.chat import SYSTEM_PROMPT, ChatService, _search_query
 from app.core.models import Message
-from app.core.rag import Retriever, format_context, split_documents
+from app.core.rag import Retriever, format_context, load_index, save_index, split_documents
 from tests.test_chat import FakeProvider
 
 
@@ -86,3 +86,17 @@ def test_search_query_keeps_long_or_first_question_unchanged():
         _search_query([Message("user", "Salut"), Message("user", long_question)]) == long_question
     )
     assert _search_query([Message("user", "Et en 2024 ?")]) == "Et en 2024 ?"
+
+
+def test_save_and_load_index_roundtrip_gz(tmp_path):
+    store = InMemoryVectorStore(EMBEDDINGS)
+    store.add_documents(
+        [Document(page_content="Le dividende proposé par action", metadata={"page": 40})]
+    )
+    path = tmp_path / "index.json.gz"
+    save_index(store, path)
+    loaded = load_index(path, EMBEDDINGS)
+    (entry,) = loaded.store.values()
+    assert entry["text"] == "Le dividende proposé par action"
+    assert entry["metadata"] == {"page": 40}
+    assert len(entry["vector"]) == len(next(iter(store.store.values()))["vector"])

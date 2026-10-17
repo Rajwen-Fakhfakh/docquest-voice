@@ -9,6 +9,7 @@ Principe en 2 temps :
 Tout est fait avec des briques LangChain simples, sans base de données externe.
 """
 
+import gzip
 import json
 import logging
 import time
@@ -83,6 +84,35 @@ def load_chunks(chunks_path: Path) -> list[Document]:
     return chunks
 
 
+# 6 décimales : l'écart sur la similarité cosinus est ~1e-6, et le fichier est 25 % plus léger.
+VECTOR_DECIMALS = 6
+
+
+def save_index(store: InMemoryVectorStore, index_path: Path) -> None:
+    """Écrit l'index en JSON compact, compressé en gzip si `index_path` finit par `.gz`.
+
+    Compact + arrondi + gzip : ~28 Mo au lieu de 190 Mo, donc versionnable dans git.
+    """
+    entries = {
+        entry_id: {**entry, "vector": [round(x, VECTOR_DECIMALS) for x in entry["vector"]]}
+        for entry_id, entry in store.store.items()
+    }
+    payload = json.dumps(entries, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if index_path.suffix == ".gz":
+        payload = gzip.compress(payload, compresslevel=6)
+    index_path.write_bytes(payload)
+
+
+def load_index(index_path: Path, embeddings: Embeddings) -> InMemoryVectorStore:
+    """Relit un index écrit par `save_index` (`.json` ou `.json.gz`)."""
+    raw = index_path.read_bytes()
+    if index_path.suffix == ".gz":
+        raw = gzip.decompress(raw)
+    store = InMemoryVectorStore(embeddings)
+    store.store = json.loads(raw)
+    return store
+
+
 def build_index(chunks: list[Document], embeddings: list[Embeddings], index_path: Path) -> int:
     """Calcule les embeddings des chunks et sauvegarde dans `index_path`. Retourne leur nombre.
 
@@ -122,7 +152,7 @@ def build_index(chunks: list[Document], embeddings: list[Embeddings], index_path
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         logger.info("Indexé %d/%d chunks", min(start + BATCH_SIZE, len(chunks)), len(chunks))
         time.sleep(BATCH_PAUSE_SECONDS)
-    store.dump(str(index_path))
+    save_index(store, index_path)
     partial.unlink(missing_ok=True)
     return len(chunks)
 
@@ -136,7 +166,7 @@ class Retriever:
 
     @classmethod
     def from_file(cls, index_path: Path, embeddings: Embeddings, top_k: int) -> "Retriever":
-        return cls(InMemoryVectorStore.load(str(index_path), embeddings), top_k)
+        return cls(load_index(index_path, embeddings), top_k)
 
     async def search(self, question: str) -> list[Document]:
         # Les `top_k` chunks dont l'embedding est le plus proche de celui de la question.
