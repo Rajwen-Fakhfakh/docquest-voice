@@ -29,3 +29,8 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+
+backend/ingest.log
+backend/ingest.err
+backend/server.log
+backend/server.err

@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Le .env vit à la racine du dépôt (partagé avec docker-compose plus tard).
 ROOT_DIR = Path(__file__).resolve().parents[3]
+DATA_DIR = ROOT_DIR / "backend" / "data"
 
 
 class Settings(BaseSettings):
@@ -18,8 +19,17 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str | None = None
+    # Clés supplémentaires (séparées par des virgules), utilisées seulement par scripts/ingest.py
+    # pour passer outre le quota gratuit journalier des embeddings.
+    gemini_api_keys_extra: str = ""
     gemini_chat_model: str = "gemini-3.8-flash"
     gemini_live_model: str = "gemini-2.5-flash-native-audio-preview-09-2025"
+    # RAG : modèle d'embeddings, PDF source, index généré par scripts/ingest.py, nb de chunks.
+    gemini_embedding_model: str = "gemini-embedding-001"
+    rag_pdf_path: Path = DATA_DIR / "deu2025.pdf"
+    rag_chunks_path: Path = DATA_DIR / "chunks.jsonl"
+    rag_index_path: Path = DATA_DIR / "index.json"
+    rag_top_k: int = 5
     # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur du .env
     # avant notre validateur, ce qui échoue pour `CORS_ORIGINS=http://localhost:5173`.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
