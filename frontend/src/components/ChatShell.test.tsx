@@ -32,9 +32,46 @@ afterEach(() => {
 });
 
 describe("ChatShell", () => {
-  it("affiche l'invite initiale quand il n'y a pas de message", () => {
+  it("présente le document et des exemples de questions quand il n'y a pas de message", () => {
     render(<ChatShell />);
-    expect(screen.getByText(/Posez une question pour démarrer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Interrogez le DEU 2025/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Voir le DEU (PDF)" })).toHaveAttribute(
+      "href",
+      "/deu2025.pdf"
+    );
+  });
+
+  it("envoie la question d'exemple sur laquelle on clique", async () => {
+    const user = userEvent.setup();
+    streamLlm.mockResolvedValue("ok");
+
+    render(<ChatShell />);
+    await user.click(screen.getByRole("button", { name: /dividende proposé/i }));
+
+    expect(streamLlm).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/dividende proposé/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Interrogez le DEU 2025/i)).not.toBeInTheDocument();
+  });
+
+  it("rend les pages citées cliquables vers le PDF", async () => {
+    const user = userEvent.setup();
+    streamLlm.mockImplementation(async (_history: unknown, onChunk: (c: string) => void) => {
+      onChunk("Dividende de 3,01 € (p. 12, 40)");
+      return "";
+    });
+
+    render(<ChatShell />);
+    await user.type(screen.getByLabelText("Message"), "Dividende ?");
+    await user.click(screen.getByLabelText("Envoyer"));
+
+    expect(await screen.findByRole("link", { name: "12" })).toHaveAttribute(
+      "href",
+      "/deu2025.pdf#page=12"
+    );
+    expect(screen.getByRole("link", { name: "40" })).toHaveAttribute(
+      "href",
+      "/deu2025.pdf#page=40"
+    );
   });
 
   it("désactive le bouton d'envoi quand le champ est vide", () => {
