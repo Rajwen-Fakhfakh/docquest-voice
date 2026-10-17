@@ -20,8 +20,13 @@ node_modules/
 dist/
 .vite/
 
-# Data générée (PDF du DEU, index, etc.)
-data/
+# Data générée (PDF du DEU, etc.). On versionne seulement les chunks et l'index prêts à l'emploi.
+data/*
+!data/
+!backend/data/
+backend/data/*
+!backend/data/chunks.jsonl
+!backend/data/index.json.gz
 *.pdf
 
 # IDE / OS

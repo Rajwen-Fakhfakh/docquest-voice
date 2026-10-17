@@ -1,0 +1,41 @@
+name: CD
+
+# Ne construit et publie les images que sur main (pas sur chaque branche de travail).
+# GEMINI_API_KEY n'est pas utilisée ici : l'index RAG est déjà commité (voir docs/rag-v3.md
+# §6) et les tests tournent avec des fakes. Elle n'est nécessaire qu'à l'exécution (voir
+# README « Déploiement ») — à ajouter dans Settings → Secrets and variables → Actions si un
+# futur step en a besoin au build.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase repository name (requis par GHCR)
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ env.REPO_LC }}-backend:latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ghcr.io/${{ env.REPO_LC }}-frontend:latest

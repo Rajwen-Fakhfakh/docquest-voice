@@ -60,14 +60,24 @@ LangChain fournit les briques, pas l'orchestration.
 
 ## 6. Utilisation
 
+L'index prêt à l'emploi est versionné : `backend/data/index.json.gz` (2899 chunks avec leurs
+embeddings, ~28 Mo) et `backend/data/chunks.jsonl` (texte découpé, source pour tout régénérer).
+**Après un `git clone`, il n'y a rien à indexer** : il suffit de renseigner `GEMINI_API_KEY` dans
+le `.env` et de lancer le backend. La clé sert encore à embedder chaque question (1 requête).
+
+Pour régénérer l'index (autre document, autre modèle d'embeddings) :
+
 ```bash
 cd backend
-# 1. PDF dans backend/data/deu2025.pdf, GEMINI_API_KEY dans le .env
-.venv\Scripts\python scripts/ingest.py     # produit backend/data/index.json
-# 2. Relancer le backend : l'index est chargé automatiquement
+# chunks.jsonl dans backend/data/ (ou le PDF en secours), GEMINI_API_KEY dans le .env
+.venv\Scripts\python scripts/ingest.py     # produit backend/data/index.json.gz
 ```
 
-Sans `index.json`, le chat fonctionne comme avant (sans RAG) : pas de plantage.
+L'ingestion est reprenable (`index.json.gz.partial`) et bascule sur les clés de
+`GEMINI_API_KEYS_EXTRA` quand le quota gratuit journalier (1000 requêtes) est épuisé.
+Les vecteurs sont arrondis à 6 décimales et compressés en gzip (190 Mo -> 28 Mo).
+
+Sans index, le chat fonctionne comme avant (sans RAG) : pas de plantage.
 
 ## 7. Flux détaillé d'une question
 
