@@ -2,14 +2,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from qdrant_client import QdrantClient
+from starlette.requests import HTTPConnection
 
 from app.core.chat import ChatService
 from app.core.config import Settings, get_settings
 from app.core.errors import ConfigurationError
 from app.core.rag import Retriever
+from app.core.ratelimit import RequestGuard, client_ip
 from app.core.voice import VoiceService
 from app.providers.gemini import GeminiChatProvider
 from app.providers.gemini_live import GeminiVoiceProvider
@@ -85,3 +87,15 @@ def get_voice_service(
     if not settings.gemini_api_key:
         return None
     return _build_voice_service(settings.gemini_api_key, settings.gemini_live_model)
+
+
+def get_guard(conn: HTTPConnection) -> RequestGuard:
+    # HTTPConnection (et non Request) : la même dépendance sert aux routes HTTP et au WebSocket.
+    return conn.app.state.guard
+
+
+def enforce_rate_limit(
+    request: Request, guard: Annotated[RequestGuard, Depends(get_guard)]
+) -> None:
+    """Dépendance des routes HTTP : 429 si l'IP (ou la démo entière) a trop consommé."""
+    guard.check(client_ip(request))

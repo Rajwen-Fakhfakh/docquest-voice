@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { streamLlm } = vi.hoisted(() => ({ streamLlm: vi.fn() }));
-vi.mock("@/lib/llm", () => ({ streamLlm }));
+vi.mock("@/lib/llm", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/llm")>("@/lib/llm")),
+  streamLlm,
+}));
 
 const { voiceSessionStart, voiceSessionStop, voiceSessionSetSoundOn } = vi.hoisted(() => ({
   voiceSessionStart: vi.fn(),
@@ -15,6 +18,7 @@ vi.mock("@/lib/voice", () => ({
   VoiceSession: { start: voiceSessionStart },
 }));
 
+import { RateLimitedError } from "@/lib/llm";
 import ChatShell from "./ChatShell";
 
 beforeEach(() => {
@@ -85,6 +89,17 @@ describe("ChatShell", () => {
     expect(
       await screen.findByText("Une erreur est survenue. Veuillez réessayer.")
     ).toBeInTheDocument();
+  });
+
+  it("affiche un message dédié quand le backend limite le débit", async () => {
+    const user = userEvent.setup();
+    streamLlm.mockRejectedValue(new RateLimitedError());
+
+    render(<ChatShell />);
+    await user.type(screen.getByLabelText("Message"), "Salut");
+    await user.click(screen.getByLabelText("Envoyer"));
+
+    expect(await screen.findByText(/Trop de requêtes/)).toBeInTheDocument();
   });
 
   it("le clic sur le micro démarre une session vocale", async () => {
