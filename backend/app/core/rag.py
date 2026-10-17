@@ -6,7 +6,8 @@ Principe en 2 temps :
   2. REQUÊTE (à chaque question) :
        question -> embedding -> chunks les plus proches -> injectés dans le prompt du LLM
 
-Tout est fait avec des briques LangChain simples, sans base de données externe.
+Tout est fait avec des briques LangChain simples. La recherche se fait soit dans un fichier local
+(`InMemoryVectorStore`), soit dans Qdrant Cloud (`QdrantVectorStore`) si QDRANT_URL est défini.
 """
 
 import gzip
@@ -17,9 +18,12 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
+from langchain_qdrant import QdrantVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 logger = logging.getLogger(__name__)
 
@@ -157,16 +161,59 @@ def build_index(chunks: list[Document], embeddings: list[Embeddings], index_path
     return len(chunks)
 
 
-class Retriever:
-    """Recherche sémantique dans l'index chargé depuis le disque."""
+UPLOAD_BATCH_SIZE = 256
 
-    def __init__(self, store: InMemoryVectorStore, top_k: int) -> None:
+
+def upload_index_to_qdrant(index_path: Path, client: QdrantClient, collection: str) -> int:
+    """Envoie les vecteurs déjà calculés d'un index local dans Qdrant (aucun appel d'embedding).
+
+    Crée la collection si besoin (cosinus, dimension lue dans les vecteurs). Les ids de l'index
+    sont des UUID : relancer l'envoi remplace les points existants au lieu de les dupliquer.
+    Le payload suit le format de `QdrantVectorStore` (`page_content` + `metadata`).
+    """
+    raw = index_path.read_bytes()
+    if index_path.suffix == ".gz":
+        raw = gzip.decompress(raw)
+    entries = list(json.loads(raw).values())
+    if not entries:
+        return 0
+    if not client.collection_exists(collection):
+        size = len(entries[0]["vector"])
+        client.create_collection(
+            collection, vectors_config=VectorParams(size=size, distance=Distance.COSINE)
+        )
+    for start in range(0, len(entries), UPLOAD_BATCH_SIZE):
+        points = [
+            PointStruct(
+                id=e["id"],
+                vector=e["vector"],
+                payload={"page_content": e["text"], "metadata": e["metadata"]},
+            )
+            for e in entries[start : start + UPLOAD_BATCH_SIZE]
+        ]
+        client.upsert(collection, points=points)
+        sent = min(start + UPLOAD_BATCH_SIZE, len(entries))
+        logger.info("Envoyé %d/%d points", sent, len(entries))
+    return len(entries)
+
+
+class Retriever:
+    """Recherche sémantique dans un vector store (fichier local ou Qdrant)."""
+
+    def __init__(self, store: VectorStore, top_k: int) -> None:
         self._store = store
         self._top_k = top_k
 
     @classmethod
     def from_file(cls, index_path: Path, embeddings: Embeddings, top_k: int) -> "Retriever":
         return cls(load_index(index_path, embeddings), top_k)
+
+    @classmethod
+    def from_qdrant(
+        cls, client: QdrantClient, collection: str, embeddings: Embeddings, top_k: int
+    ) -> "Retriever":
+        store = QdrantVectorStore(client=client, collection_name=collection, embedding=embeddings)
+        return cls(store, top_k)
 
     async def search(self, question: str) -> list[Document]:
         # Les `top_k` chunks dont l'embedding est le plus proche de celui de la question.

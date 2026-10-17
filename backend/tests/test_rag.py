@@ -3,10 +3,18 @@ import hashlib
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import InMemoryVectorStore
+from qdrant_client import QdrantClient
 
 from app.core.chat import SYSTEM_PROMPT, ChatService, _search_query
 from app.core.models import Message
-from app.core.rag import Retriever, format_context, load_index, save_index, split_documents
+from app.core.rag import (
+    Retriever,
+    format_context,
+    load_index,
+    save_index,
+    split_documents,
+    upload_index_to_qdrant,
+)
 from tests.test_chat import FakeProvider
 
 
@@ -100,3 +108,25 @@ def test_save_and_load_index_roundtrip_gz(tmp_path):
     assert entry["text"] == "Le dividende proposé par action"
     assert entry["metadata"] == {"page": 40}
     assert len(entry["vector"]) == len(next(iter(store.store.values()))["vector"])
+
+
+async def test_upload_to_qdrant_then_search(tmp_path):
+    store = InMemoryVectorStore(EMBEDDINGS)
+    store.add_documents(
+        [
+            Document(page_content="Les émissions de CO2 de TotalEnergies", metadata={"page": 12}),
+            Document(page_content="Le dividende proposé par action", metadata={"page": 40}),
+        ]
+    )
+    path = tmp_path / "index.json.gz"
+    save_index(store, path)
+
+    client = QdrantClient(":memory:")  # Qdrant en mémoire : pas de réseau
+    assert upload_index_to_qdrant(path, client, "deu") == 2
+    assert upload_index_to_qdrant(path, client, "deu") == 2  # relance : pas de doublons
+    assert client.count("deu").count == 2
+
+    retriever = Retriever.from_qdrant(client, "deu", EMBEDDINGS, top_k=1)
+    docs = await retriever.search("Le dividende proposé par action")
+    assert [d.metadata["page"] for d in docs] == [40]
+    assert docs[0].page_content == "Le dividende proposé par action"

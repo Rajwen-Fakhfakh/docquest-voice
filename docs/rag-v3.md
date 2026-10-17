@@ -79,6 +79,20 @@ Les vecteurs sont arrondis à 6 décimales et compressés en gzip (190 Mo -> 28 
 
 Sans index, le chat fonctionne comme avant (sans RAG) : pas de plantage.
 
+### Qdrant Cloud (optionnel)
+
+Si `QDRANT_URL` (et `QDRANT_API_KEY`) sont dans le `.env`, la recherche interroge Qdrant au lieu
+du fichier local (`Retriever.from_qdrant`, `QdrantVectorStore`). Collection : `QDRANT_COLLECTION`
+(défaut `deu2025`). Pour la remplir à partir de `index.json.gz`, sans nouvel appel d'embedding :
+
+```bash
+cd backend
+.venv\Scripts\python scripts/upload_qdrant.py   # relançable : mêmes ids, pas de doublons
+```
+
+Sans `QDRANT_URL`, on retombe sur l'index local. Le plan gratuit Qdrant supprime un cluster
+inactif ; relancer le script suffit à recréer la collection.
+
 ## 7. Flux détaillé d'une question
 
 1. `POST /chat` → `ChatService.reply(messages)`.
