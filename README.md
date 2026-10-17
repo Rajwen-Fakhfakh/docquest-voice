@@ -99,6 +99,53 @@ disponible aux Actions si un futur step en a besoin :
 1. Repo GitHub → **Settings** → **Secrets and variables** → **Actions**.
 2. **New repository secret** → nom `GEMINI_API_KEY`, valeur = la clé.
 
+## Déploiement
+
+Démo publique, hébergée uniquement sur des plans gratuits :
+
+- **Frontend** : [docquest-voice.vercel.app](https://docquest-voice.vercel.app) (Vercel Hobby)
+- **Backend** : [docquest-voice-api.onrender.com](https://docquest-voice-api.onrender.com) (Render Free, Frankfurt)
+
+### Backend sur Render (Web Service, Docker)
+
+- Dépôt GitHub, branche `feat/qdrant`, contexte Docker `backend/`, Dockerfile `backend/Dockerfile`.
+- Health check : `/health`. Le Dockerfile écoute sur le port 8000 (`PORT=8000`).
+- Variables à renseigner dans **Environment → Environment Variables** (pas dans « Secret Files » :
+  l'appli lit `os.environ`, pas `/etc/secrets`) :
+
+| Variable | Valeur |
+| --- | --- |
+| `GEMINI_API_KEY` | clé API Gemini (secret) |
+| `QDRANT_URL` | URL du cluster Qdrant Cloud (secret) |
+| `QDRANT_API_KEY` | clé API Qdrant Cloud (secret) |
+| `QDRANT_COLLECTION` | `deu2025` |
+| `GEMINI_CHAT_MODEL` | modèle du chat texte |
+| `CORS_ORIGINS` | URL exacte du front, sans slash final |
+| `RATE_LIMIT_PER_MINUTE` | `20` (requêtes par minute et par IP, `0` = désactivé) |
+| `DAILY_REQUEST_CAP` | `500` (plafond global par jour, `0` = désactivé) |
+
+`QDRANT_URL` doit rester défini : sans lui, le backend charge l'index local (≈ 190 Mo en
+mémoire) et dépasse les 512 Mo du plan gratuit.
+
+### Frontend sur Vercel (projet Next.js)
+
+- Répertoire racine : `frontend`.
+- `API_URL` = URL du backend (`https://<service>.onrender.com`), appelée côté serveur par `/api/chat`.
+- `NEXT_PUBLIC_WS_URL` = `wss://<service>.onrender.com`. Cette variable est figée dans le bundle
+  au build : redéployer le front si l'URL du backend change.
+- La protection « Vercel Authentication » doit être désactivée pour que la démo soit publique.
+- `output: "standalone"` (`next.config.js`) est ignoré par Vercel et ne gêne pas son build.
+
+### Limites du plan gratuit
+
+- **Mise en veille** : Render Free endort le service après ≈ 15 min sans trafic ; le premier appel
+  suivant prend ≈ 50 s (réveil + chargement).
+- **Mémoire** : 512 Mo côté Render, d'où le recours à Qdrant Cloud pour le RAG.
+- **Quotas** : la limite par IP et le plafond journalier sont en mémoire (une seule instance) et
+  repartent de zéro à chaque redémarrage. Au-delà, le backend répond 429. Les quotas gratuits de
+  Gemini et de Qdrant Cloud s'appliquent aussi.
+- **Mode vocal** : le navigateur ouvre directement `wss://<backend>/ws/voice` et a besoin d'un micro.
+
 ## Captures
 
 <!-- TODO: ajouter des captures d'écran / une démo du chat et du mode vocal -->
