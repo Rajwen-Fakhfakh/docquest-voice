@@ -39,3 +39,6 @@ backend/ingest.log
 backend/ingest.err
 backend/server.log
 backend/server.err
+
+# Le PDF du DEU servi par le front (lien « Voir le DEU » dans le chat).
+!frontend/public/deu2025.pdf

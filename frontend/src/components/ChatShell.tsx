@@ -2,11 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState, FormEvent } from "react";
 import type { ChatTurn } from "@/lib/chat";
+import { pageUrl, splitCitations } from "@/lib/citations";
 import { RateLimitedError, streamLlm } from "@/lib/llm";
 import { applyVoiceMessage, type TranscriptEntry } from "@/lib/transcript";
 import { VoiceSession } from "@/lib/voice";
 
-type VoiceStatus = "idle" | "connecting" | "live";
+// PDF servi depuis frontend/public.
+const DOC_URL = "/deu2025.pdf";
+
+const SUGGESTIONS = [
+  "Quel est le dividende proposé par action pour 2025 ?",
+  "Quels sont les principaux facteurs de risque du Groupe ?",
+  "Quels sont les objectifs du Groupe en matière de neutralité carbone ?",
+];
+
+type VoiceStatus ="idle" | "connecting" | "live";
 
 type Message = TranscriptEntry & {
   // Message d'erreur affiché à l'écran : jamais renvoyé au modèle.
@@ -83,9 +93,13 @@ export default function ChatShell() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const text = input.trim();
+    void send(input);
+  }
+
+  async function send(raw: string) {
+    const text = raw.trim();
     if (!text || loading) return;
 
     const userMessage: Message = {
@@ -137,17 +151,38 @@ export default function ChatShell() {
     <main className="chat-main">
       <header className="chat-header">
         <span className="chat-title">DocQuest</span>
+        <a className="doc-link" href={DOC_URL} target="_blank" rel="noopener noreferrer">
+          Voir le DEU (PDF)
+        </a>
       </header>
 
       <div className="chat-messages">
         {messages.length === 0 && (
-          <p className="chat-empty">
-            Posez une question pour démarrer la conversation.
-          </p>
+          <section className="chat-empty">
+            <h1>Interrogez le DEU 2025 de TotalEnergies</h1>
+            <p>
+              Posez vos questions à l&apos;écrit ou à la voix : les réponses s&apos;appuient sur le{" "}
+              <a href={DOC_URL} target="_blank" rel="noopener noreferrer">
+                Document d&apos;Enregistrement Universel
+              </a>{" "}
+              et citent les pages concernées.
+            </p>
+            <ul className="suggestions" aria-label="Exemples de questions">
+              {SUGGESTIONS.map((question) => (
+                <li key={question}>
+                  <button type="button" onClick={() => void send(question)} disabled={loading}>
+                    {question}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         {messages.map((m) => (
           <div key={m.id} className={`chat-bubble-row ${m.role}`}>
-            <div className={`chat-bubble ${m.role}`}>{m.content}</div>
+            <div className={`chat-bubble ${m.role}`}>
+              {m.role === "assistant" && !m.isError ? <Citations content={m.content} /> : m.content}
+            </div>
           </div>
         ))}
         {/* L'indicateur de saisie disparaît dès que la réponse commence à arriver. */}
@@ -204,6 +239,30 @@ export default function ChatShell() {
         </button>
       </form>
     </main>
+  );
+}
+
+// Les pages citées par l'assistant deviennent des liens vers la page du PDF.
+function Citations({ content }: { content: string }) {
+  return (
+    <>
+      {splitCitations(content).map((s, i) =>
+        s.kind === "text" ? (
+          s.text
+        ) : (
+          <a
+            key={i}
+            className="page-link"
+            href={pageUrl(DOC_URL, s.page)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Ouvrir la page ${s.page} du DEU`}
+          >
+            {s.page}
+          </a>
+        )
+      )}
+    </>
   );
 }
 
