@@ -30,14 +30,19 @@ class Settings(BaseSettings):
     rag_chunks_path: Path = DATA_DIR / "chunks.jsonl"
     rag_index_path: Path = DATA_DIR / "index.json.gz"
     rag_top_k: int = 5
+    # Qdrant Cloud : si l'URL est renseignée, le RAG interroge Qdrant plutôt que le fichier local.
+    qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
+    qdrant_collection: str = "deu2025"
     # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur du .env
     # avant notre validateur, ce qui échoue pour `CORS_ORIGINS=http://localhost:5173`.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
-    @field_validator("gemini_api_key", mode="before")
+    @field_validator("gemini_api_key", "qdrant_url", "qdrant_api_key", mode="before")
     @classmethod
     def _blank_key_is_none(cls, value: str | None) -> str | None:
         # `GEMINI_API_KEY=` (valeur vide dans .env.example) équivaut à « non configurée ».
+        # Même règle pour les variables Qdrant.
         if isinstance(value, str) and not value.strip():
             return None
         return value
