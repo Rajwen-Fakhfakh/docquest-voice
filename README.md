@@ -1,19 +1,35 @@
 # DocQuest Voice
 
+[![CI](https://github.com/Rajwen-Fakhfakh/docquest-voice/actions/workflows/ci.yml/badge.svg)](https://github.com/Rajwen-Fakhfakh/docquest-voice/actions/workflows/ci.yml)
+
 Assistant conversationnel (texte + voix) sur le Document d'Enregistrement Universel (DEU)
 2025 de TotalEnergies, avec RAG (Retrieval-Augmented Generation) pour ancrer les réponses
 dans le document plutôt que dans la mémoire du modèle.
 
+**Démo en ligne : [docquest-voice.vercel.app](https://docquest-voice.vercel.app)** — essayez par
+exemple « Quel est le dividende proposé par action pour 2025 ? ». Le premier appel peut prendre
+une cinquantaine de secondes (le backend gratuit se réveille), voir [Déploiement](#déploiement).
+
 ## Architecture
 
+```text
+Navigateur ──► Next.js (Vercel) ── /api/chat ──► FastAPI (Render) ──► Gemini (chat)
+     │                                               │
+     │ WebSocket /ws/voice (direct)                  └──► Qdrant Cloud (RAG)
+     └───────────────────────────────────────────────►    Gemini Live (voix)
+```
+
 - **Backend** (`backend/`) : FastAPI + Gemini (`google-genai`). Expose `POST /chat`,
-  `POST /chat/stream` et le WebSocket `/ws/voice` (mode vocal, Gemini Live).
+  `POST /chat/stream`, `GET /health` et le WebSocket `/ws/voice` (mode vocal, Gemini Live).
+  Une limite de débit en mémoire (par IP et par jour) protège le quota Gemini de la démo publique.
 - **Frontend** (`frontend/`) : Next.js (App Router). `ChatShell` pilote le chat texte
-  (streaming via `/api/chat`) et le mode vocal (WebSocket direct vers le backend, micro +
-  lecture audio).
+  (streaming via `/api/chat`, un proxy serveur vers le backend) et le mode vocal (WebSocket
+  direct vers le backend, micro + lecture audio).
 - **RAG** : chunks du DEU indexés avec `gemini-embedding-001`, recherche par similarité
-  cosinus, extraits injectés dans le prompt système. Index déjà calculé et versionné
-  (`backend/data/index.json.gz`) — rien à indexer après un clone. Détails : [`docs/rag-v3.md`](docs/rag-v3.md).
+  cosinus, extraits injectés dans le prompt système, pages citées dans la réponse. Les vecteurs
+  sont dans **Qdrant Cloud** (collection `deu2025`) quand `QDRANT_URL` est défini ; sinon le
+  backend charge l'index local versionné (`backend/data/index.json.gz`, ≈ 190 Mo en mémoire),
+  ce qui permet de tout lancer après un simple clone. Détails : [`docs/rag-v3.md`](docs/rag-v3.md).
 
 ## Installation
 
@@ -39,6 +55,10 @@ npm install
   - `GEMINI_API_KEY` — clé API Gemini ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)).
   - `GEMINI_CHAT_MODEL`, `GEMINI_LIVE_MODEL`, `GEMINI_EMBEDDING_MODEL` — modèles utilisés.
   - `CORS_ORIGINS` — origines autorisées pour le front (séparées par des virgules).
+  - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` — Qdrant Cloud pour le RAG (optionnel :
+    sans `QDRANT_URL`, l'index local est utilisé). `python scripts/upload_qdrant.py` charge la collection.
+  - `RATE_LIMIT_PER_MINUTE`, `DAILY_REQUEST_CAP` — requêtes par minute et par IP, et plafond
+    global par jour (`0` = désactivé). Défauts : 20 et 500.
   - `GEMINI_API_KEYS_EXTRA` — clés de secours, utilisées seulement par `scripts/ingest.py`.
 - **`frontend/.env.local`** (copier depuis `frontend/.env.example`) :
   - `API_URL` — URL du backend appelée côté serveur par la route `/api/chat`.
@@ -89,15 +109,14 @@ réseau, aucune clé API requise.
 - **CD** (`.github/workflows/cd.yml`) : sur push vers `main`, construit et publie les images
   Docker backend/frontend sur GitHub Container Registry (GHCR).
 
-### Secret `GEMINI_API_KEY` sur GitHub
+### Secrets
 
-Aucun workflow n'en a besoin pour l'instant (tests avec doublures, index RAG déjà commité).
-Elle est nécessaire **à l'exécution** pour qui déploie les images (ex. passée à
-`docker run -e GEMINI_API_KEY=...` ou au `docker-compose.yml` de prod). Pour la rendre
-disponible aux Actions si un futur step en a besoin :
-
-1. Repo GitHub → **Settings** → **Secrets and variables** → **Actions**.
-2. **New repository secret** → nom `GEMINI_API_KEY`, valeur = la clé.
+Aucun workflow n'a besoin de secret (tests avec doublures, index RAG déjà commité). Les clés
+(`GEMINI_API_KEY`, `QDRANT_API_KEY`) ne sont requises qu'**à l'exécution**. Les **secrets GitHub
+Actions** ne servent qu'aux workflows : Render et Vercel ne les lisent pas. Sur Render, les clés
+se définissent comme variables d'environnement du service (voir [Déploiement](#déploiement)).
+Render et Vercel redéploient automatiquement à chaque push sur leur branche, indépendamment du
+workflow CD, qui se contente de publier les images Docker.
 
 ## Déploiement
 
@@ -148,4 +167,5 @@ mémoire) et dépasse les 512 Mo du plan gratuit.
 
 ## Captures
 
-<!-- TODO: ajouter des captures d'écran / une démo du chat et du mode vocal -->
+<!-- TODO: ajouter une capture ou un GIF du chat (réponse avec pages citées) et du mode vocal,
+     par exemple dans docs/img/, puis les référencer ici. -->
