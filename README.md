@@ -168,10 +168,6 @@ mémoire) et dépasse les 512 Mo du plan gratuit.
   Gemini et de Qdrant Cloud s'appliquent aussi.
 - **Mode vocal** : le navigateur ouvre directement `wss://<backend>/ws/voice` et a besoin d'un micro.
 
-## Captures
-
-<!-- TODO: ajouter une capture ou un GIF du chat (réponse avec pages citées) et du mode vocal,
-     par exemple dans docs/img/, puis les référencer ici. -->
 
 ## Diagramme d'architecture
 
