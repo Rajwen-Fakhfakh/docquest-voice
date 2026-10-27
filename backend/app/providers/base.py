@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 from app.core.models import Message
 
 if TYPE_CHECKING:
-    from app.core.voice import VoiceSession
+    from app.core.voice import SearchTool, VoiceSession
 
 
 class ChatProvider(Protocol):
@@ -21,6 +21,12 @@ class ChatProvider(Protocol):
 class VoiceProvider(Protocol):
     """Contrat d'un fournisseur de conversation vocale temps réel."""
 
-    def connect(self, system_prompt: str) -> AbstractAsyncContextManager["VoiceSession"]:
-        """Ouvre une session. Lève `ProviderError` si la connexion échoue."""
+    def connect(
+        self, system_prompt: str, search: "SearchTool | None" = None
+    ) -> AbstractAsyncContextManager["VoiceSession"]:
+        """Ouvre une session. Lève `ProviderError` si la connexion échoue.
+
+        Si `search` est fourni, le modèle peut l'appeler (outil `search_deu`) pour interroger
+        le DEU.
+        """
         ...

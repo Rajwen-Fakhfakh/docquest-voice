@@ -76,8 +76,27 @@ def get_chat_service(settings: Annotated[Settings, Depends(get_settings)]) -> Ch
 
 
 @lru_cache
-def _build_voice_service(api_key: str, model: str) -> VoiceService:
-    return VoiceService(GeminiVoiceProvider(api_key=api_key, model=model))
+def _build_voice_service(
+    api_key: str,
+    model: str,
+    embedding_model: str,
+    index_path: Path,
+    top_k: int,
+    qdrant_url: str | None,
+    qdrant_api_key: str | None,
+    qdrant_collection: str,
+) -> VoiceService:
+    # Même retriever (donc même index et mêmes embeddings) que le chat.
+    retriever = _build_retriever(
+        api_key,
+        embedding_model,
+        index_path,
+        top_k,
+        qdrant_url,
+        qdrant_api_key,
+        qdrant_collection,
+    )
+    return VoiceService(GeminiVoiceProvider(api_key=api_key, model=model), retriever)
 
 
 def get_voice_service(
@@ -86,7 +105,16 @@ def get_voice_service(
     """`None` quand la clé manque : la route WebSocket signale l'erreur au client."""
     if not settings.gemini_api_key:
         return None
-    return _build_voice_service(settings.gemini_api_key, settings.gemini_live_model)
+    return _build_voice_service(
+        settings.gemini_api_key,
+        settings.gemini_live_model,
+        settings.gemini_embedding_model,
+        settings.rag_index_path,
+        settings.rag_top_k,
+        settings.qdrant_url,
+        settings.qdrant_api_key,
+        settings.qdrant_collection,
+    )
 
 
 def get_guard(conn: HTTPConnection) -> RequestGuard:
