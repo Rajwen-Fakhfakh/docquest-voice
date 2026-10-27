@@ -17,6 +17,7 @@ Navigateur ──► Next.js (Vercel) ── /api/chat ──► FastAPI (Render
      │                                               │
      │ WebSocket /ws/voice (direct)                  └──► Qdrant Cloud (RAG)
      └───────────────────────────────────────────────►    Gemini Live (voix)
+                                                          (outil search_deu ──► même RAG)
 ```
 
 - **Backend** (`backend/`) : FastAPI + Gemini (`google-genai`). Expose `POST /chat`,
@@ -29,7 +30,9 @@ Navigateur ──► Next.js (Vercel) ── /api/chat ──► FastAPI (Render
   cosinus, extraits injectés dans le prompt système, pages citées dans la réponse. Les vecteurs
   sont dans **Qdrant Cloud** (collection `deu2025`) quand `QDRANT_URL` est défini ; sinon le
   backend charge l'index local versionné (`backend/data/index.json.gz`, ≈ 190 Mo en mémoire),
-  ce qui permet de tout lancer après un simple clone. Détails : [`docs/rag-v3.md`](docs/rag-v3.md).
+  ce qui permet de tout lancer après un simple clone. Le mode vocal utilise le même retriever :
+  Gemini Live appelle l'outil `search_deu` et reçoit les extraits du DEU avec leur page.
+  Détails : [`docs/rag-v3.md`](docs/rag-v3.md).
 
 ## Installation
 
@@ -169,3 +172,9 @@ mémoire) et dépasse les 512 Mo du plan gratuit.
 
 <!-- TODO: ajouter une capture ou un GIF du chat (réponse avec pages citées) et du mode vocal,
      par exemple dans docs/img/, puis les référencer ici. -->
+
+## Diagramme d'architecture
+
+[Ouvrir le diagramme interactif](https://htmlpreview.github.io/?https://github.com/Rajwen-Fakhfakh/docquest-voice/blob/main/docs/architecture-docquest.html)
+([`docs/architecture-docquest.html`](docs/architecture-docquest.html), à ouvrir dans un navigateur
+après un clone).

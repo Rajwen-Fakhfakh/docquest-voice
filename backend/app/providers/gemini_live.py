@@ -9,8 +9,10 @@ from google.genai import types
 from app.core.errors import ProviderError
 from app.core.voice import (
     INPUT_SAMPLE_RATE,
+    SEARCH_TOOL_NAME,
     AudioEvent,
     InterruptedEvent,
+    SearchTool,
     TranscriptEvent,
     TurnCompleteEvent,
     VoiceEvent,
@@ -19,9 +21,47 @@ from app.core.voice import (
 logger = logging.getLogger(__name__)
 
 
+SEARCH_DECLARATION = types.FunctionDeclaration(
+    name=SEARCH_TOOL_NAME,
+    description=(
+        "Cherche dans le Document d'Enregistrement Universel (DEU) 2025 de TotalEnergies les "
+        "extraits utiles pour répondre à la question."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "question": types.Schema(
+                type=types.Type.STRING,
+                description="La question de l'utilisateur, reformulée de façon autonome.",
+            )
+        },
+        required=["question"],
+    ),
+)
+
+
 class GeminiVoiceSession:
-    def __init__(self, session) -> None:
+    def __init__(self, session, search: SearchTool | None = None) -> None:
         self._session = session
+        self._search = search
+
+    async def _answer_tool_call(self, tool_call) -> None:
+        """Exécute les appels à `search_deu` demandés par le modèle et lui renvoie les extraits."""
+        responses = []
+        for call in tool_call.function_calls or []:
+            if call.name != SEARCH_TOOL_NAME or self._search is None:
+                output = f"Outil inconnu : {call.name}"
+            else:
+                try:
+                    output = await self._search((call.args or {}).get("question", ""))
+                except Exception:
+                    # Une panne du RAG ne doit pas couper la conversation : le modèle l'annonce.
+                    logger.exception("Recherche DEU impossible")
+                    output = "La recherche dans le DEU est indisponible."
+            responses.append(
+                types.FunctionResponse(id=call.id, name=call.name, response={"output": output})
+            )
+        await self._session.send_tool_response(function_responses=responses)
 
     async def send_audio(self, pcm: bytes) -> None:
         try:
@@ -38,6 +78,8 @@ class GeminiVoiceSession:
             # `receive()` s'arrête à chaque fin de tour : on la relance pour toute la session.
             while True:
                 async for message in self._session.receive():
+                    if message.tool_call:
+                        await self._answer_tool_call(message.tool_call)
                     for event in _convert(message):
                         if isinstance(event, AudioEvent):
                             if not first_audio_logged:
@@ -89,12 +131,13 @@ class GeminiVoiceProvider:
         self._model = model
 
     @asynccontextmanager
-    async def connect(self, system_prompt: str):
+    async def connect(self, system_prompt: str, search: SearchTool | None = None):
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=system_prompt,
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
+            tools=[types.Tool(function_declarations=[SEARCH_DECLARATION])] if search else None,
         )
         # Seule l'ouverture de la session est convertie en ProviderError : une exception
         # levée dans le corps du `async with` (ex. déconnexion du navigateur) doit la
@@ -110,4 +153,4 @@ class GeminiVoiceProvider:
                 )
                 raise ProviderError("Échec de la connexion à Gemini Live") from exc
             logger.info("Gemini Live : session ouverte (modèle %s)", self._model)
-            yield GeminiVoiceSession(session)
+            yield GeminiVoiceSession(session, search)
