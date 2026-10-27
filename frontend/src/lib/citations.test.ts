@@ -20,6 +20,26 @@ describe("splitCitations", () => {
     expect(joined).toBe(text);
   });
 
+  it("reconnaît les pages dites à l'oral dans la transcription vocale", () => {
+    const text = "Le dividende est de 3,40 euros. Page 495, page 57 et page 425.";
+    const segments = splitCitations(text);
+    expect(segments.filter((s) => s.kind === "page")).toEqual([
+      { kind: "page", page: 495 },
+      { kind: "page", page: 57 },
+      { kind: "page", page: 425 },
+    ]);
+    const joined = segments.map((s) => (s.kind === "page" ? String(s.page) : s.text)).join("");
+    expect(joined).toBe(text);
+  });
+
+  it("reconnaît une page isolée en fin de phrase", () => {
+    expect(splitCitations("Baisse de 4 912 millions. Page 52.")).toEqual([
+      { kind: "text", text: "Baisse de 4 912 millions. Page " },
+      { kind: "page", page: 52 },
+      { kind: "text", text: "." },
+    ]);
+  });
+
   it("laisse intact un texte sans citation", () => {
     expect(splitCitations("Bonjour (voir ci-dessus)")).toEqual([
       { kind: "text", text: "Bonjour (voir ci-dessus)" },
