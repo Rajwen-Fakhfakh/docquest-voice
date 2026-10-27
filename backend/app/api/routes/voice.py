@@ -51,8 +51,11 @@ async def _pump_events(websocket: WebSocket, session: VoiceSession) -> None:
 
 
 async def _fail(websocket: WebSocket, message: str, code: int = WS_INTERNAL_ERROR) -> None:
-    await websocket.send_json({"type": "error", "message": message})
-    await websocket.close(code=code)
+    try:
+        await websocket.send_json({"type": "error", "message": message})
+        await websocket.close(code=code)
+    except Exception:  # le navigateur est déjà parti : rien à signaler
+        logger.debug("WebSocket déjà fermé, erreur non transmise : %s", message)
 
 
 @router.websocket("/ws/voice")

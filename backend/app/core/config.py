@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # pour passer outre le quota gratuit journalier des embeddings.
     gemini_api_keys_extra: str = ""
     gemini_chat_model: str = "gemini-3.8-flash"
-    gemini_live_model: str = "gemini-2.5-flash-native-audio-preview-09-2025"
+    gemini_live_model: str = "gemini-3.8-live"
     # RAG : modèle d'embeddings, PDF source, index généré par scripts/ingest.py, nb de chunks.
     gemini_embedding_model: str = "gemini-embedding-001"
     rag_pdf_path: Path = DATA_DIR / "deu2025.pdf"
