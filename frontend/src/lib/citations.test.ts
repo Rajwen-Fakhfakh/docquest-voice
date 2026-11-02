@@ -47,6 +47,75 @@ describe("splitCitations", () => {
   });
 });
 
+describe("splitCitations : nombres en toutes lettres", () => {
+  const pagesOf = (text: string) =>
+    splitCitations(text).flatMap((s) => (s.kind === "page" ? [s.page] : []));
+
+  it("reconnaît la liste dite par Gemini Live", () => {
+    const text =
+      "Page dix-sept, cent soixante-quatorze, cent soixante-quinze, trois cent deux et trois cent quatre.";
+    expect(pagesOf(text)).toEqual([17, 174, 175, 302, 304]);
+    expect(splitCitations(text).at(-1)).toEqual({ kind: "text", text: "." });
+  });
+
+  it("garde le texte autour et les séparateurs inchangés", () => {
+    const text = "Voir page dix-sept, cent soixante-quatorze et trois cent deux pour le détail.";
+    expect(splitCitations(text)).toEqual([
+      { kind: "text", text: "Voir page " },
+      { kind: "page", page: 17 },
+      { kind: "text", text: ", " },
+      { kind: "page", page: 174 },
+      { kind: "text", text: " et " },
+      { kind: "page", page: 302 },
+      { kind: "text", text: " pour le détail." },
+    ]);
+  });
+
+  it("distingue « et » interne (vingt et un) et « et » de liste", () => {
+    expect(pagesOf("page quatre-vingt-dix-sept et page soixante et onze")).toEqual([97, 71]);
+    expect(pagesOf("page vingt et un et trente et une")).toEqual([21, 31]);
+    expect(pagesOf("pages douze et quinze")).toEqual([12, 15]);
+  });
+
+  it("lit les centaines et les milliers", () => {
+    expect(pagesOf("page quatre cent vingt")).toEqual([420]);
+    expect(pagesOf("page deux cents")).toEqual([200]);
+    expect(pagesOf("page cent")).toEqual([100]);
+    expect(pagesOf("page quatre-vingts")).toEqual([80]);
+    expect(pagesOf("page mille deux cent trente-quatre")).toEqual([1234]);
+    expect(pagesOf("page deux mille")).toEqual([2000]);
+  });
+
+  it("accepte les accents, la casse et les séparateurs variés", () => {
+    expect(pagesOf("Page ZÉRO")).toEqual([0]);
+    expect(pagesOf("pages douze-quinze")).toEqual([12, 15]);
+    expect(pagesOf("pages douze – quinze ; vingt")).toEqual([12, 15, 20]);
+    expect(pagesOf("page 12 et page quarante")).toEqual([12, 40]);
+    expect(pagesOf("page quarante et page 12")).toEqual([40, 12]);
+  });
+
+  it("n'invente pas de lien sans nombre valide", () => {
+    for (const text of [
+      "Une page de garde.",
+      "La page suivante est vide.",
+      "Une page blanche",
+      "page six mois",
+      "Une page un peu longue",
+      "page",
+    ]) {
+      expect(splitCitations(text)).toEqual([{ kind: "text", text }]);
+    }
+  });
+
+  it("s'arrête au premier mot qui n'est pas un nombre", () => {
+    expect(splitCitations("page vingt-trois de garde")).toEqual([
+      { kind: "text", text: "page " },
+      { kind: "page", page: 23 },
+      { kind: "text", text: " de garde" },
+    ]);
+  });
+});
+
 describe("pageUrl", () => {
   it("ouvre le PDF à la page demandée", () => {
     expect(pageUrl("/deu2025.pdf", 12)).toBe("/deu2025.pdf#page=12");
